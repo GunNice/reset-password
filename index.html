@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redefinir Senha - Play.TV</title>
+    <title>Processando Autenticação - Play.TV</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
@@ -15,6 +15,7 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
+            overflow: hidden; /* Evita scroll desnecessário */
         }
         .container {
             background-color: #101924; /* Cor mais escura para o card */
@@ -24,6 +25,11 @@
             width: 100%;
             max-width: 400px;
             text-align: center;
+            animation: fadeIn 0.5s ease-out; /* Animação de fade-in */
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         h1 {
             color: #4CAF50; /* Verde para sucesso */
@@ -37,15 +43,21 @@
             display: block;
             margin-bottom: 8px;
             text-align: left;
+            color: #ADD8E6; /* Azul claro para labels */
         }
         input[type="password"] {
-            width: calc(100% - 20px);
+            width: calc(100% - 22px); /* Ajuste para padding e borda */
             padding: 10px;
             margin-bottom: 15px;
             border: 1px solid #333;
             border-radius: 5px;
             background-color: #2a3b4c;
             color: #E0E0E0;
+            font-size: 1em;
+            box-sizing: border-box; /* Inclui padding e borda na largura total */
+        }
+        input[type="password"]::placeholder {
+            color: #A0A0A0; /* Cor do placeholder */
         }
         button {
             background-color: #007BFF; /* Azul padrão para botões */
@@ -55,15 +67,20 @@
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
-            transition: background-color 0.3s ease;
+            transition: background-color 0.3s ease, transform 0.1s ease;
         }
         button:hover {
             background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
         }
         .message {
             margin-top: 20px;
             padding: 10px;
             border-radius: 5px;
+            font-weight: bold;
         }
         .message.success {
             background-color: #d4edda;
@@ -75,14 +92,34 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        .message.info {
+            background-color: #cce5ff;
+            color: #004085;
+            border: 1px solid #b8daff;
+        }
+        #loadingSpinner {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #007BFF; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none; /* Escondido por padrão */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Redefinir Senha</h1>
-        <p id="instructionText">Por favor, digite sua nova senha abaixo:</p>
+        <h1 id="mainTitle">Processando...</h1>
+        <p id="mainText">Aguarde enquanto processamos sua solicitação.</p>
 
-        <div id="passwordForm">
+        <!-- Formulário de redefinição de senha (inicialmente oculto) -->
+        <div id="passwordForm" style="display: none;">
             <label for="newPassword">Nova Senha:</label>
             <input type="password" id="newPassword" placeholder="Digite sua nova senha">
 
@@ -92,28 +129,38 @@
             <button id="resetButton">Redefinir Senha</button>
         </div>
 
+        <div id="loadingSpinner"></div>
         <div id="message" class="message" style="display: none;"></div>
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://idvxgdmbrivanrzjncad.supabase.co'; // Substitua pelo seu Supabase URL
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkdnhnZG1icml2YW5yempuY2FkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwNDU3OTEsImV4cCI6MjA2NjYyMTc5MX0.-QUBO_9WcHPne0DKiuMMrTosLjngTuZfj6G_Du6TJGU'; // Substitua pela sua anon key
+        // Substitua pelos seus dados do Supabase
+        const SUPABASE_URL = 'https://idvxgdmbrivanrzjncad.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkdnhnZG1icml2YW5yempuY2FkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwNDU3OTEsImV4cCI6MjA2NjYyMTc5MX0.-QUBO_9WcHPne0DKiuMMrTosLjngTuZfj6G_Du6TJGU';
 
         const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Referências aos elementos HTML
+        const mainTitle = document.getElementById('mainTitle');
+        const mainText = document.getElementById('mainText');
+        const passwordForm = document.getElementById('passwordForm');
         const newPasswordInput = document.getElementById('newPassword');
         const confirmPasswordInput = document.getElementById('confirmPassword');
         const resetButton = document.getElementById('resetButton');
         const messageDiv = document.getElementById('message');
-        const instructionText = document.getElementById('instructionText');
-        const passwordForm = document.getElementById('passwordForm');
+        const loadingSpinner = document.getElementById('loadingSpinner');
 
         // Função para exibir mensagens
         function displayMessage(text, type) {
             messageDiv.textContent = text;
             messageDiv.className = `message ${type}`;
             messageDiv.style.display = 'block';
+        }
+
+        // Função para mostrar/ocultar o spinner de carregamento
+        function showLoading(show) {
+            loadingSpinner.style.display = show ? 'block' : 'none';
+            resetButton.disabled = show; // Desabilita o botão enquanto carrega
         }
 
         // Função para analisar os parâmetros da URL
@@ -124,22 +171,54 @@
             return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
         }
 
-        // Evento ao carregar a página
-        window.onload = function() {
-            const type = getUrlParameter('type');
-            if (type !== 'recovery') {
-                instructionText.textContent = 'Esta página é para redefinição de senha. O link que você clicou não é de recuperação de senha.';
-                passwordForm.style.display = 'none';
-                displayMessage('Link inválido ou expirado.', 'error');
+        // --- Lógica Principal ao Carregar a Página ---
+        window.onload = async function() {
+            showLoading(true);
+            const urlParams = new URLSearchParams(window.location.search);
+            const type = urlParams.get('type');
+            const accessToken = urlParams.get('access_token'); // Supabase usa access_token para recovery
+
+            // Limpar mensagens e formulários anteriores
+            displayMessage('', '');
+            messageDiv.style.display = 'none';
+            passwordForm.style.display = 'none';
+
+            if (type === 'recovery') {
+                // Fluxo de redefinição de senha
+                mainTitle.textContent = 'Redefinir Senha';
+                mainText.textContent = 'Por favor, digite sua nova senha abaixo:';
+                passwordForm.style.display = 'block';
+                showLoading(false);
+
+                // No fluxo de redefinição de senha, o Supabase SDK automaticamente
+                // gerencia a sessão temporária baseada no access_token da URL.
+                // Não precisamos chamar signInWithOtp ou setSession aqui explicitamente
+                // para o update (updateUser).
+                // Apenas nos certificamos de que a sessão está definida para
+                // o update funcionar.
+
+            } else if (type === 'signup') {
+                // Fluxo de confirmação de cadastro
+                mainTitle.textContent = 'Confirmação de Cadastro';
+                mainText.textContent = 'Sua conta Play.TV foi confirmada com sucesso! Você já pode fazer login no aplicativo.';
+                displayMessage('🎉 Cadastro confirmado!', 'success');
+                showLoading(false);
+
+            } else {
+                // Tipo desconhecido ou link inválido/expirado
+                mainTitle.textContent = 'Link Inválido';
+                mainText.textContent = 'O link que você acessou é inválido ou expirou. Por favor, tente novamente.';
+                displayMessage('Erro: Link inválido ou expirado.', 'error');
+                showLoading(false);
             }
-            // O Supabase JS SDK deve ser capaz de lidar com o access_token na URL automaticamente
-            // quando você tenta fazer operações de autenticação como updateUser.
         };
 
         // Evento de clique no botão Redefinir Senha
         resetButton.addEventListener('click', async () => {
             const newPassword = newPasswordInput.value;
             const confirmPassword = confirmPasswordInput.value;
+
+            displayMessage('', ''); // Limpa mensagens anteriores
 
             if (newPassword.length === 0 || confirmPassword.length === 0) {
                 displayMessage('Por favor, preencha ambos os campos de senha.', 'error');
@@ -151,14 +230,16 @@
                 return;
             }
 
-            if (newPassword.length < 6) { // A Supabase exige no mínimo 6 caracteres por padrão
+            if (newPassword.length < 6) { // Supabase exige no mínimo 6 caracteres por padrão
                 displayMessage('A senha deve ter no mínimo 6 caracteres.', 'error');
                 return;
             }
 
+            showLoading(true);
             try {
-                // Ao chamar updateUser sem uma sessão ativa, mas com o access_token na URL,
-                // o Supabase SDK utiliza o token para autenticar a requisição e atualizar o usuário.
+                // Aqui, o Supabase JS SDK usa a sessão temporária (que foi estabelecida
+                // automaticamente ao carregar a página com o access_token da URL)
+                // para realizar a atualização da senha.
                 const { error } = await supabase.auth.updateUser({
                     password: newPassword
                 });
@@ -166,12 +247,25 @@
                 if (error) {
                     displayMessage(`Erro ao redefinir senha: ${error.message}`, 'error');
                 } else {
-                    displayMessage('Senha redefinida com sucesso! Você pode fechar esta página e voltar ao aplicativo para fazer login.', 'success');
+                    mainTitle.textContent = 'Sucesso!';
+                    mainText.textContent = 'Sua senha foi redefinida com sucesso! Você já pode fechar esta página e voltar ao aplicativo para fazer login com sua nova senha.';
+                    displayMessage('✅ Senha redefinida!', 'success');
                     passwordForm.style.display = 'none'; // Esconde o formulário após o sucesso
                 }
             } catch (e) {
                 displayMessage(`Erro inesperado: ${e.message}`, 'error');
+            } finally {
+                showLoading(false);
             }
+        });
+
+        // Adiciona um listener para a mudança de estado da autenticação do Supabase
+        // Isso é útil para depuração e para garantir que a sessão foi tratada
+        supabase.auth.onAuthStateChange((event, session) => {
+            console.log('Auth event:', event, 'Session:', session);
+            // Você pode adicionar lógica aqui se precisar redirecionar o usuário
+            // para alguma página pós-autenticação, embora para TV box isso seja
+            // menos relevante, já que ele voltaria para o app.
         });
     </script>
 </body>
